@@ -250,10 +250,8 @@ async def setup_tickets(ctx):
         description=(
             "Potřebuješ pomoci? Vytvoř si ticket a my ti rádi pomůžeme!\n\n"
             "**PRACOVNÍ DOBA NAŠÍ PODPORY:**\n"
-            "Pondělí – Čtvrtek: 16:00–21:00\n"
-            "Pátek: 16:00–22:00\n"
-            "Sobota: 13:00–22:00\n"
-            "Neděle: 16:00–20:00"
+            "Pondělí – Pátek: 16:00–21:00\n"
+            "Sobota - Neděle: 15:30-22:00\n"
         ),
         color=0x2ECC71,
     )
