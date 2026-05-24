@@ -221,9 +221,15 @@ def build_modal(category_key: str):
                 embed.add_field(name=q, value=value, inline=False)
             embed.set_footer(text="NovaX Roleplay • Ticket Systém")
 
-            mentions = " ".join(f"<@&{rid}>" for rid in cat["role_ids"])
-            await channel.send(content=f"{member.mention} {mentions}", embed=embed, view=CloseView())
-            await interaction.followup.send(f"✅ Tvůj ticket byl vytvořen: {channel.mention}", ephemeral=True)
+            await channel.send(
+    content=f"{member.mention}",
+    embed=embed,
+    view=CloseView(),
+    allowed_mentions=discord.AllowedMentions(
+        users=True,
+        roles=False
+    )
+)
 
     return TicketModal()
 
@@ -239,28 +245,25 @@ class CloseView(discord.ui.View):
         await interaction.followup.send("🔒 Ticket se zavírá a transcript byl uložen...", ephemeral=True)
         await interaction.channel.delete()
 
-# ─── DROPDOWN MENU ─────────────────────────────────────────────────────────────
-class CategorySelect(discord.ui.Select):
-    def __init__(self):
-        options = [
-            discord.SelectOption(label=cat["label"], value=key, emoji=cat["emoji"])
-            for key, cat in CATEGORIES.items()
-        ]
-        super().__init__(
-            placeholder="Vyber si kategorii...",
-            options=options,
-            custom_id="ticket_category_select",
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        category_key = self.values[0]
-        modal = build_modal(category_key)
-        await interaction.response.send_modal(modal)
-
-class CategoryView(discord.ui.View):
+# ─── BUTTON MENU ───────────────────────────────────────────────────────────────
+class CategoryButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(CategorySelect())
+
+        for key, cat in CATEGORIES.items():
+            button = discord.ui.Button(
+                label=cat["label"],
+                emoji=cat["emoji"],
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"ticket_{key}"
+            )
+
+            async def callback(interaction: discord.Interaction, category_key=key):
+                modal = build_modal(category_key)
+                await interaction.response.send_modal(modal)
+
+            button.callback = callback
+            self.add_item(button)
 
 # ─── SLASH PŘÍKAZY ─────────────────────────────────────────────────────────────
 @bot.tree.command(name="ticket-add", description="Přidá uživatele do ticket kanálu")
@@ -297,7 +300,7 @@ async def setup_tickets(ctx):
     )
     embed.set_image(url="https://cdn.discordapp.com/attachments/1123921380891709530/1507413657074663535/novayx.png?ex=6a11cfde&is=6a107e5e&hm=dfca305237d890930eeafd679bf41b86246fba6ecceb5bc7ec5c6852eb593ab8&")
     embed.set_footer(text="NovaX Roleplay • Ticket Systém")
-    await channel.send(embed=embed, view=CategoryView())
+    await channel.send(embed=embed, view=CategoryButtons())
     await ctx.message.delete()
 
 @bot.command()
@@ -309,7 +312,7 @@ async def sync(ctx):
 # ─── PERSISTENT VIEWS ──────────────────────────────────────────────────────────
 @bot.event
 async def on_ready():
-    bot.add_view(CategoryView())
+    bot.add_view(CategoryButtons())
     bot.add_view(CloseView())
     await bot.tree.sync()
     print(f"✅ Bot přihlášen jako {bot.user}")
