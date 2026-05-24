@@ -250,20 +250,29 @@ class CategoryButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-        for key, cat in CATEGORIES.items():
-            button = discord.ui.Button(
-                label=cat["label"],
-                emoji=cat["emoji"],
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"ticket_{key}"
-            )
+        self.add_item(TicketButton("ostatni"))
+        self.add_item(TicketButton("zadost_frakci"))
+        self.add_item(TicketButton("bugy"))
+        self.add_item(TicketButton("stiznost_staff"))
+        self.add_item(TicketButton("nahlasenihrace"))
 
-            async def callback(interaction: discord.Interaction, category_key=key):
-                modal = build_modal(category_key)
-                await interaction.response.send_modal(modal)
 
-            button.callback = callback
-            self.add_item(button)
+class TicketButton(discord.ui.Button):
+    def __init__(self, category_key):
+        cat = CATEGORIES[category_key]
+
+        super().__init__(
+            label=cat["label"],
+            emoji=cat["emoji"],
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"ticket_{category_key}"
+        )
+
+        self.category_key = category_key
+
+    async def callback(self, interaction: discord.Interaction):
+        modal = build_modal(self.category_key)
+        await interaction.response.send_modal(modal)
 
 # ─── SLASH PŘÍKAZY ─────────────────────────────────────────────────────────────
 @bot.tree.command(name="ticket-add", description="Přidá uživatele do ticket kanálu")
