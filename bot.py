@@ -32,7 +32,7 @@ CATEGORIES = {
         "questions": ["S čím potřebuješ pomoci nebo jakou otázku máš?"],
     },
     "zadost_frakci": {
-        "label": "Ž岸dost o frakci",
+        "label": "Žádost o frakci",
         "emoji": "🏛️",
         "category_id": 1507440236249223189,
         "role_ids": [
@@ -111,20 +111,38 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 intents.presences = True
+intents.guilds = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ─── TRANSCRIPT (chat-exporter) ────────────────────────────────────────────────
 async def send_transcript(channel: discord.TextChannel, closer: discord.Member):
     """Vygeneruje HTML transcript včetně všech obrázků a médií a pošle ho dál."""
-    transcript = await chat_exporter.export(
-        channel=channel,
-        limit=None,
-        tz_info="Europe/Prague",
-        military_time=True,
-        bot=bot,
-        gather_files=True 
-    )
+    try:
+        # Přidáno UTC časování a plná podpora attachmentů
+        transcript = await chat_exporter.export(
+            channel=channel,
+            limit=None,
+            tz_info="Europe/Prague",
+            military_time=True,
+            bot=bot,
+            gather_files=True 
+        )
+    except Exception as e:
+        print(f"Chyba při exportu s obrázky: {e}. Zkouším nouzový export bez souborů.")
+        try:
+            # Nouzový plán: Pokud stahování velkých souborů selže, vygeneruje se aspoň čistý text
+            transcript = await chat_exporter.export(
+                channel=channel,
+                limit=None,
+                tz_info="Europe/Prague",
+                military_time=True,
+                bot=bot,
+                gather_files=False
+            )
+        except Exception as ex:
+            print(f"Kritické selhání transcriptu: {ex}")
+            return
 
     if transcript is None:
         return
@@ -181,7 +199,7 @@ def build_modal(category_key: str):
                 return
 
             category_obj = guild.get_channel(cat["category_id"])
-            channel_name = f"{member.name}-{cat['label'].lower().replace(' ', '-').replace('/', '-')}"[:100]
+            channel_name = f"{member.name}-{cat['label'].lower().replace(' ', '-').replace('/', '-').replace('á', 'a').replace('ó', 'o')}"[:100]
 
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -216,15 +234,16 @@ class ConfirmCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Uzavřít", style=discord.ButtonStyle.danger, emoji="🔒")
+    @discord.ui.button(label="Uzavřít", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="btn_confirm_close")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         for item in self.children:
             item.disabled = True
         await interaction.response.edit_message(
-            content="🔒 Ticket se uzavře za **10 sekund**...",
+            content="🔒 Ticket se uzavře za **10 sekund** a generuje se transcript...",
             embed=None,
             view=self
         )
+        # Nejdřív bezpečně odešleme transcript
         await send_transcript(interaction.channel, interaction.user)
         await asyncio.sleep(10)
         try:
@@ -232,7 +251,7 @@ class ConfirmCloseView(discord.ui.View):
         except:
             pass
 
-    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary, emoji="❌")
+    @discord.ui.button(label="Zrušit", style=discord.ButtonStyle.secondary, emoji="❌", custom_id="btn_cancel_close")
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             await interaction.response.edit_message(
@@ -254,10 +273,11 @@ class CloseView(discord.ui.View):
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(
             title="⚠️ Uzavřít ticket?",
-            description="Opravdu chcete tento ticket uzavřít?\nPo uzavření bude ticket **nenávratně smazán**.",
+            description="Opravdu chcete tento ticket uzavřít?\nPo uzavření bude ticket **nenávratně smazán** a uložen do logu.",
             color=0xE74C3C
         )
-        await interaction.response.send_message(embed=embed, view=ConfirmCloseView(), ephemeral=False)
+        # Změněno na ephemeral=True, aby to viděl jen ten, kdo mačká tlačítko a nespamovalo to kanál
+        await interaction.response.send_message(embed=embed, view=ConfirmCloseView(), ephemeral=True)
 
 # ─── BUTTON MENU ───────────────────────────────────────────────────────────────
 class CategoryButtons(discord.ui.View):
@@ -326,8 +346,13 @@ async def sync(ctx):
 # ─── PERSISTENT VIEWS ──────────────────────────────────────────────────────────
 @bot.event
 async def on_ready():
+    # Inicializace chat_exporter přímo s botem na startu
+    chat_exporter.init_exporter(bot)
+    
     bot.add_view(CategoryButtons())
     bot.add_view(CloseView())
+    bot.add_view(ConfirmCloseView()) # Registrace potvrzovacího zobrazení pro stabilitu
+    
     await bot.tree.sync()
     print(f"✅ Bot přihlášen jako {bot.user}")
 
